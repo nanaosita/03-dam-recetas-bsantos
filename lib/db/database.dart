@@ -1,11 +1,12 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-class DatabaseHelper {
-  static final DatabaseHelper instance = DatabaseHelper._init();
+class DatabaseR {
+  static final DatabaseR instance = DatabaseR._init();
   static Database? _database;
 
-  DatabaseHelper._init();
+  DatabaseR._init();
+
   Future<Database> get database async {
     if (_database != null) return _database!;
 
@@ -27,10 +28,49 @@ class DatabaseHelper {
             id_receta INTEGER NOT NULL,
             calificacion INTEGER NOT NULL,
             comentario TEXT NOT NULL,
-            fecha TEXT NOT NULL
+            usuario TEXT NOT NULL
           )
         ''');
       },
+    );
+  }
+
+  Future<int> insertarResena(Map<String, dynamic> datos) async {
+    final db = await database;
+    return await db.insert('resenas', datos);
+  }
+
+  Future<List<Map<String, dynamic>>> obtenerResenas(int idReceta) async {
+    final db = await database;
+
+    return await db.query(
+      'resenas',
+      where: 'id_receta = ?',
+      whereArgs: [idReceta],
+      orderBy: 'id DESC',
+    );
+  }
+
+  Future<int> actualizarResena(
+    int id,
+    Map<String, dynamic> datos,
+  ) async {
+    final db = await database;
+
+    return await db.update(
+      'resenas',
+      datos,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> eliminarResena(int id) async {
+    final db = await database;
+    return await db.delete(
+      'resenas',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 }

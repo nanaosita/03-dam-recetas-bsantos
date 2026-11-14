@@ -5,7 +5,6 @@ import 'package:recetasapp/services/resena_service.dart';
 
 class DetalleRecetaScreen extends StatefulWidget {
   final Receta receta;
-
   const DetalleRecetaScreen({super.key, required this.receta});
   @override
   State<DetalleRecetaScreen> createState() => _DetalleRecetaScreenState();
@@ -14,6 +13,12 @@ class DetalleRecetaScreen extends StatefulWidget {
 class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
   final ResenaService _resenaService = ResenaService();
   late Future<List<Resena>> _resenasFuture;
+
+  bool _mostrarFormulario = false;
+  int _calificacionSeleccionada = 5;
+
+  final comentarioController = TextEditingController();
+  final nombreController = TextEditingController();
 
   @override
   void initState() {
@@ -25,106 +30,61 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
     _resenasFuture = _resenaService.obtenerResenas(widget.receta.id);
   }
 
-  Future<void> _mostrarFormulario() async {
-    int calificacionSeleccionada = 5;
-    final comentarioController = TextEditingController();
-
-    final resultado = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, actualizarDialogo) {
-            return AlertDialog(
-              title: const Text("Agregar reseña"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("¿Qué calificación le das a esta receta?"),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        onPressed: () {
-                          actualizarDialogo(() {
-                            calificacionSeleccionada = index + 1;
-                          });
-                        },
-                        icon: Icon(
-                          index < calificacionSeleccionada
-                              ? Icons.star
-                              : Icons.star_border,
-                          color: Colors.amber,
-                        ),
-                      );
-                    }),
-                  ),
-                  TextField(
-                    controller: comentarioController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: "Escribe tu comentario...",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text("Cancelar"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (comentarioController.text.trim().isEmpty) {
-                      return;
-                    }
-                    Navigator.pop(context, true);
-                  },
-                  child: const Text("Guardar"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (resultado == true) {
-      try {
-        final nuevaResena = Resena(
-          idReceta: widget.receta.id,
-          calificacion: calificacionSeleccionada,
-          comentario: comentarioController.text.trim(),
-          fecha: DateTime.now().toIso8601String(),
-        );
-
-        await _resenaService.guardarResena(nuevaResena);
-
-        if (!mounted) return;
-
-        setState(() {
-          _cargarResenas();
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Reseña guardada correctamente")),
-        );
-      } catch (e) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al guardar la reseña: $e")),
-        );
-      }
+  Future<void> _guardarResena() async {
+    if (nombreController.text.trim().isEmpty ||
+        comentarioController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Completa tu nombre y comentario"),
+        ),
+      );
+      return;
     }
 
+    try {
+      final nuevaResena = Resena(
+        idReceta: widget.receta.id,
+        usuario: nombreController.text.trim(),
+        calificacion: _calificacionSeleccionada,
+        comentario: comentarioController.text.trim(),
+      );
+
+      await _resenaService.guardarResena(nuevaResena);
+      if (!mounted) return;
+
+      setState(() {
+        _mostrarFormulario = false;
+        _calificacionSeleccionada = 5;
+        nombreController.clear();
+        comentarioController.clear();
+        _resenasFuture =
+            _resenaService.obtenerResenas(widget.receta.id);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Reseña guardada correctamente"),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al guardar la reseña: $e")),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    nombreController.dispose();
     comentarioController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final receta = widget.receta;
+
     return Scaffold(
       appBar: AppBar(title: Text("Detalle de la receta")),
       body: ListView(
@@ -143,7 +103,8 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
               ),
             ),
           ),
-          SizedBox(height: 16),
+
+          const SizedBox(height: 16),
           Wrap(
             spacing: 10,
             children: [
@@ -153,11 +114,13 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
               Chip(label: Text('${receta.calorias} kcal')),
             ],
           ),
+
           const SizedBox(height: 8),
           const Text(
             "Ingredientes: ",
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
+
           const SizedBox(height: 8),
           ...receta.ingredientes.map(
             (ingrediente) => Padding(
@@ -165,17 +128,19 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
               child: Row(
                 children: [
                   const Icon(Icons.circle, size: 6, color: Colors.orange),
-                  const SizedBox(height: 8),
+                  const SizedBox(width: 8),
                   Expanded(child: Text(ingrediente)),
                 ],
               ),
             ),
           ),
+
           const SizedBox(height: 20),
           const Text(
             "Preparación: ",
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
+
           const SizedBox(height: 8),
           ...receta.instrucciones.asMap().entries.map(
             (entrada) => Padding(
@@ -198,26 +163,88 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
             ),
           ),
 
-          // SECCION DE RESEÑAS
           const SizedBox(height: 25),
           const Divider(),
           const SizedBox(height: 10),
-
           const Text(
             "Reseñas de la receta",
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
-
           ElevatedButton.icon(
-            onPressed: _mostrarFormulario,
+            onPressed: () {
+              setState(() {
+                _mostrarFormulario = !_mostrarFormulario;
+              });
+            },
             icon: const Icon(Icons.rate_review),
-            label: const Text("Agregar reseña"),
+            label: Text(
+              _mostrarFormulario ? "Cancelar reseña" : "Agregar reseña",
+            ),
           ),
 
-          const SizedBox(height: 15),
+          if (_mostrarFormulario) ...[
+            const SizedBox(height: 15),
+            const Text(
+              "Escribe tu reseña",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
 
+            const SizedBox(height: 12),
+            TextField(
+              controller: nombreController,
+              decoration: const InputDecoration(
+                labelText: "Tu nombre",
+                hintText: "Escribe tu nombre",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            const Text("¿Qué calificación le das a esta receta?"),
+            const SizedBox(height: 5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                return IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _calificacionSeleccionada = index + 1;
+                    });
+                  },
+                  icon: Icon(
+                    index < _calificacionSeleccionada
+                        ? Icons.star
+                        : Icons.star_border,
+                    color: Colors.amber,
+                    size: 30,
+                  ),
+                );
+              }),
+            ),
+
+            TextField(
+              controller: comentarioController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: "Comentario",
+                hintText: "Escribe tu comentario...",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _guardarResena,
+                child: const Text("Guardar reseña"),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 15),
           FutureBuilder<List<Resena>>(
             future: _resenasFuture,
             builder: (context, snapshot) {
@@ -230,7 +257,6 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
               }
 
               final resenas = snapshot.data ?? [];
-
               if (resenas.isEmpty) {
                 return const Text(
                   "Todavía no hay reseñas. ¡Sé el primero en comentar!",
@@ -245,6 +271,15 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            resena.usuario,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+
+                          const SizedBox(height: 5),
                           Row(
                             children: List.generate(5, (index) {
                               return Icon(
@@ -256,16 +291,9 @@ class _DetalleRecetaScreenState extends State<DetalleRecetaScreen> {
                               );
                             }),
                           ),
+
                           const SizedBox(height: 8),
                           Text(resena.comentario),
-                          const SizedBox(height: 8),
-                          Text(
-                            resena.fecha.split('T').first,
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
                         ],
                       ),
                     ),
